@@ -46,6 +46,9 @@
           <q-separator />
 
           <q-card-actions align="right">
+             <q-btn flat round color="secondary" icon="visibility" @click="openViewDialog(prompt)">
+                <q-tooltip>View</q-tooltip>
+             </q-btn>
              <q-btn flat round color="primary" icon="edit" @click="openPromptDialog(prompt)">
                 <q-tooltip>Edit</q-tooltip>
              </q-btn>
@@ -79,12 +82,15 @@
                   <q-input v-model="currentPrompt.description" label="Description" outlined class="q-mb-md" />
                   <q-select 
                      v-model="selectedTags" 
-                     :options="tagStore.tags" 
+                     :options="tagOptions" 
                      option-label="name" 
                      option-value="id" 
                      label="Tags" 
                      multiple 
                      use-chips 
+                     use-input
+                     @new-value="createTagValue"
+                     @filter="filterTags"
                      outlined 
                      class="q-mb-md"
                   >
@@ -133,6 +139,66 @@
          </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- Read-only View Dialog -->
+    <q-dialog v-model="isViewDialogOpen" maximized transition-show="slide-up" transition-hide="slide-down">
+      <q-card class="column">
+         <q-toolbar class="bg-secondary text-white">
+            <q-toolbar-title>{{ currentPrompt.title }}</q-toolbar-title>
+            <q-btn flat round dense icon="close" v-close-popup />
+         </q-toolbar>
+
+         <q-card-section class="col q-pt-none scroll q-pa-md">
+            <div class="row q-col-gutter-md">
+               <!-- Left Column: Content -->
+               <div class="col-12 col-md-8">
+                  <div class="text-h6">Description</div>
+                  <div class="text-body1 q-mb-md">{{ currentPrompt.description || 'No description provided.' }}</div>
+                  
+                  <div class="text-h6">System Instruction</div>
+                  <q-card flat bordered class="q-mb-md bg-grey-1">
+                     <q-card-section style="white-space: pre-wrap;" class="text-body1">{{ currentPrompt.system_instruction || 'None' }}</q-card-section>
+                  </q-card>
+                  
+                  <div class="text-h6">Prompt Content</div>
+                  <q-card flat bordered class="q-mb-md bg-grey-1">
+                     <q-card-section style="white-space: pre-wrap;" class="text-body1">{{ currentPrompt.content }}</q-card-section>
+                  </q-card>
+               </div>
+
+               <!-- Right Column: Settings -->
+               <div class="col-12 col-md-4">
+                  <q-card bordered flat>
+                     <q-card-section>
+                        <div class="text-h6 q-mb-md">Model Settings</div>
+                        <div class="q-mb-sm"><strong>Model:</strong> {{ currentPrompt.model_name }}</div>
+                        <div class="q-mb-sm"><strong>Temperature:</strong> {{ currentPrompt.config?.temperature }}</div>
+                        <div class="q-mb-sm"><strong>Top K:</strong> {{ currentPrompt.config?.topK }}</div>
+                        <div class="q-mb-sm"><strong>Top P:</strong> {{ currentPrompt.config?.topP }}</div>
+                        
+                        <div class="text-h6 q-mt-lg q-mb-sm">Tags</div>
+                        <div class="row q-gutter-xs">
+                           <q-chip 
+                              v-for="tag in currentPrompt.tags" 
+                              :key="tag.id" 
+                              dense 
+                              :style="{ backgroundColor: tag.color, color: 'white' }"
+                           >
+                              {{ tag.name }}
+                           </q-chip>
+                           <div v-if="!currentPrompt.tags || currentPrompt.tags.length === 0" class="text-grey text-italic">No tags</div>
+                        </div>
+                     </q-card-section>
+                  </q-card>
+               </div>
+            </div>
+         </q-card-section>
+         <q-separator />
+         <q-card-actions align="right" class="q-pa-md">
+            <q-btn flat label="Close" color="primary" v-close-popup />
+         </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -148,7 +214,9 @@ const tagStore = useTagStore()
 const $q = useQuasar()
 
 const isDialogOpen = ref(false)
+const isViewDialogOpen = ref(false)
 const selectedTags = ref<Tag[]>([])
+const tagOptions = ref<Tag[]>([])
 
 // Default values for a new prompt
 const defaultPrompt = (): Partial<Prompt> => ({
@@ -166,6 +234,7 @@ const modelOptions = ['gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.0-p
 
 onMounted(async () => {
   await tagStore.fetchTags()
+  tagOptions.value = tagStore.tags
   await promptStore.fetchPrompts()
 })
 
@@ -179,6 +248,47 @@ function openPromptDialog(prompt?: Prompt) {
      selectedTags.value = []
   }
   isDialogOpen.value = true
+}
+
+function openViewDialog(prompt: Prompt) {
+  currentPrompt.value = JSON.parse(JSON.stringify(prompt))
+  isViewDialogOpen.value = true
+}
+
+function filterTags(val: string, update: (callback: () => void) => void) {
+  if (val === '') {
+    update(() => {
+      tagOptions.value = tagStore.tags
+    })
+    return
+  }
+  
+  update(() => {
+    const needle = val.toLowerCase()
+    tagOptions.value = tagStore.tags.filter(
+      (v) => v.name.toLowerCase().indexOf(needle) > -1
+    )
+  })
+}
+
+async function createTagValue(val: string, done: (item: any, mode: 'add-unique') => void) {
+  if (val.length > 0) {
+    const existingTag = tagStore.tags.find((t) => t.name.toLowerCase() === val.toLowerCase())
+    if (existingTag) {
+      done(existingTag, 'add-unique')
+      return
+    }
+    
+    // Create new tag with default grey color
+    const newTag = await tagStore.createTag(val, 'grey')
+    if (newTag) {
+      // Re-assign tagOptions to match updated store state
+      tagOptions.value = tagStore.tags
+      done(newTag, 'add-unique')
+    } else {
+       $q.notify({ type: 'negative', message: 'Failed to create tag.' })
+    }
+  }
 }
 
 async function savePrompt() {

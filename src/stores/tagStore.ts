@@ -26,13 +26,26 @@ export const useTagStore = defineStore('tagStore', {
                 this.isLoading = false
             }
         },
-        async createTag(name: string, color: string) {
+        async createTag(name: string, color: string): Promise<Tag | undefined> {
             try {
-                const { error } = await supabase.from('tags').insert({ name, color })
+                const { data, error } = await supabase.from('tags').insert({ name, color }).select().single()
                 if (error) throw error;
                 await this.fetchTags()
+                return data as Tag
             } catch (err: any) {
                 this.error = err.message
+                return undefined
+            }
+        },
+        async updateTag(id: string, name: string, color: string): Promise<Tag | undefined> {
+            try {
+                const { data, error } = await supabase.from('tags').update({ name, color }).eq('id', id).select().single()
+                if (error) throw error;
+                await this.fetchTags()
+                return data as Tag
+            } catch (err: any) {
+                this.error = err.message
+                return undefined
             }
         },
         async deleteTag(id: string) {

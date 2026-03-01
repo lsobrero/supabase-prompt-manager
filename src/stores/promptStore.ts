@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../supabase'
-import type { Prompt, GeminiConfig } from '../models'
+import type { Prompt } from '../models'
 
 export const usePromptStore = defineStore('promptStore', {
     state: () => ({
@@ -47,10 +47,13 @@ export const usePromptStore = defineStore('promptStore', {
             this.isLoading = true;
             this.error = null;
             try {
+                // Remove joined fields before saving
+                const { tags, prompt_tags, ...cleanPromptData } = promptData as any;
+
                 // Upsert the main prompt
                 const { data: savedPrompt, error: promptError } = await supabase
                     .from('prompts')
-                    .upsert({ ...promptData, updated_at: new Date().toISOString() })
+                    .upsert({ ...cleanPromptData, updated_at: new Date().toISOString() })
                     .select()
                     .single();
 
