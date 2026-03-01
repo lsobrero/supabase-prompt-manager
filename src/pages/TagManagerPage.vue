@@ -9,9 +9,9 @@
        <div class="col-12 col-md-4">
           <q-card bordered>
              <q-card-section>
-                <div class="text-h6 q-mb-md">Create New Tag</div>
+                <div class="text-h6 q-mb-md">{{ editingTagId ? 'Edit Tag' : 'Create New Tag' }}</div>
                 
-                <q-input v-model="newTagName" label="Tag Name" outlined class="q-mb-md" @keyup.enter="handleCreateTag" />
+                <q-input v-model="newTagName" label="Tag Name" outlined class="q-mb-md" @keyup.enter="handleSaveTag" />
                 
                 <q-input
                    v-model="newTagColor"
@@ -33,7 +33,10 @@
                    <q-chip :style="{ backgroundColor: newTagColor, color: 'white' }">{{ newTagName || 'Example' }}</q-chip>
                 </div>
                 
-                <q-btn color="primary" label="Create Tag" class="full-width" @click="handleCreateTag" :loading="tagStore.isLoading" :disable="!newTagName" />
+                <div class="row q-gutter-sm">
+                   <q-btn v-if="editingTagId" flat color="secondary" label="Cancel" @click="cancelEdit" class="col-grow" />
+                   <q-btn color="primary" :label="editingTagId ? 'Update Tag' : 'Create Tag'" class="col-grow" @click="handleSaveTag" :loading="tagStore.isLoading" :disable="!newTagName" />
+                </div>
                 <div v-if="tagStore.error" class="text-negative q-mt-sm">{{ tagStore.error }}</div>
              </q-card-section>
           </q-card>
@@ -53,6 +56,8 @@
                       :key="tag.id"
                       :style="{ backgroundColor: tag.color, color: 'white' }"
                       removable
+                      clickable
+                      @click="editTag(tag)"
                       @remove="deleteTag(tag.id)"
                    >
                      {{ tag.name }}
@@ -72,25 +77,46 @@
 import { ref, onMounted } from 'vue'
 import { useTagStore } from '../stores/tagStore'
 import { useQuasar } from 'quasar'
+import type { Tag } from '../models'
 
 const tagStore = useTagStore()
 const $q = useQuasar()
 
 const newTagName = ref('')
 const newTagColor = ref('#1976D2')
+const editingTagId = ref<string | null>(null)
 
 onMounted(async () => {
   await tagStore.fetchTags()
 })
 
-async function handleCreateTag() {
+function editTag(tag: Tag) {
+   editingTagId.value = tag.id
+   newTagName.value = tag.name
+   newTagColor.value = tag.color
+}
+
+function cancelEdit() {
+   editingTagId.value = null
+   newTagName.value = ''
+   newTagColor.value = '#1976D2'
+}
+
+async function handleSaveTag() {
    if (!newTagName.value) return;
 
-   await tagStore.createTag(newTagName.value, newTagColor.value)
-   if (!tagStore.error) {
-      $q.notify({ type: 'positive', message: 'Tag created successfully!' })
-      newTagName.value = '';
-      newTagColor.value = '#1976D2';
+   if (editingTagId.value) {
+      await tagStore.updateTag(editingTagId.value, newTagName.value, newTagColor.value)
+      if (!tagStore.error) {
+         $q.notify({ type: 'positive', message: 'Tag updated successfully!' })
+         cancelEdit()
+      }
+   } else {
+      await tagStore.createTag(newTagName.value, newTagColor.value)
+      if (!tagStore.error) {
+         $q.notify({ type: 'positive', message: 'Tag created successfully!' })
+         cancelEdit()
+      }
    }
 }
 
@@ -101,6 +127,7 @@ async function deleteTag(id: string) {
      cancel: true,
      persistent: true
   }).onOk(async () => {
+     if (editingTagId.value === id) cancelEdit()
      await tagStore.deleteTag(id)
      $q.notify({ type: 'info', message: 'Tag deleted.' })
   })
