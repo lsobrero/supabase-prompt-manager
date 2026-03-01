@@ -34,6 +34,19 @@
           </q-item-section>
         </q-item>
       </q-list>
+      
+      <q-separator />
+      
+      <q-list class="q-mt-auto">
+        <q-item clickable @click="handleLogout" class="text-negative">
+          <q-item-section avatar>
+            <q-icon name="logout" color="negative"/>
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Logout</q-item-label>
+          </q-item-section>
+        </q-item>
+      </q-list>
     </q-drawer>
 
     <q-page-container>
@@ -44,10 +57,23 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useAuthStore } from '../stores/authStore'
+import { useRouter } from 'vue-router'
 
 const leftDrawerOpen = ref(false)
+const authStore = useAuthStore()
+const router = useRouter()
 
 function toggleLeftDrawer () {
   leftDrawerOpen.value = !leftDrawerOpen.value
+}
+
+async function handleLogout() {
+  try {
+    await authStore.signOut()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+  }
 }
 </script>
